@@ -44,9 +44,9 @@ func InitSeccomp(config *configs.Seccomp) (int, error) {
 		return -1, errors.New("error initializing seccomp - invalid default action")
 	}
 
-	if defaultAction == actNotify {
-		return -1, fmt.Errorf("SCMP_ACT_NOTIFY cannot be used as default action")
-	}
+//	if defaultAction == actNotify {
+//		return -1, fmt.Errorf("SCMP_ACT_NOTIFY cannot be used as default action")
+//	}
 
 	filter, err := libseccomp.NewFilter(defaultAction)
 	if err != nil {

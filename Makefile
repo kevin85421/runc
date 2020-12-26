@@ -44,6 +44,7 @@ seccompagent:
 static:
 	$(GO_BUILD_STATIC) -o runc .
 	$(GO_BUILD_STATIC) -o contrib/cmd/recvtty/recvtty ./contrib/cmd/recvtty
+	$(GO_BUILD_STATIC) -o contrib/cmd/seccompagent/seccompagent ./contrib/cmd/seccompagent
 
 release:
 	script/release.sh -r release/$(VERSION) -v $(VERSION)
