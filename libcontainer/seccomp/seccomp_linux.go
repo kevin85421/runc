@@ -44,9 +44,11 @@ func InitSeccomp(config *configs.Seccomp) (int, error) {
 		return -1, errors.New("error initializing seccomp - invalid default action")
 	}
 
-//	if defaultAction == actNotify {
+	notifyFeatureRequired := false
+	if defaultAction == actNotify {
 //		return -1, fmt.Errorf("SCMP_ACT_NOTIFY cannot be used as default action")
-//	}
+		notifyFeatureRequired = true
+	}
 
 	filter, err := libseccomp.NewFilter(defaultAction)
 	if err != nil {
@@ -55,7 +57,6 @@ func InitSeccomp(config *configs.Seccomp) (int, error) {
 
 	// TODO: config.Flags defines the options to pass to seccomp(2) but
 	// it's not taken into consideration.
-	notifyFeatureRequired := false
 	for _, call := range config.Syscalls {
 		if call.Action == configs.Notify {
 			if call.Name == "write" {

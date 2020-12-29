@@ -147,7 +147,7 @@ func notifHandler(fd libseccomp.ScmpFd, metadata string) {
 			resp.Val = ^uint64(0) // -1
 			goto sendResponse
 		}
-
+/*
 		switch syscallName {
 		case "mkdir":
 			fileName, err := readArgString(req.Pid, int64(req.Data.Args[0]))
@@ -170,8 +170,11 @@ func notifHandler(fd libseccomp.ScmpFd, metadata string) {
 			resp.Error = int32(unix.ENOMEDIUM)
 			resp.Val = ^uint64(0) // -1
 			resp.Flags = 0
+		default:
+			logrus.Debugf("system call: %s\n", syscallName)
+			resp.Flags = 1
 		}
-
+*/
 	sendResponse:
 		if err = libseccomp.NotifRespond(fd, resp); err != nil {
 			logrus.Errorf("Error in notification response: %s", err)

@@ -9,7 +9,7 @@
 		"args": [
 			"sh",
 			"-c",
-			"cd /dev/shm ; touch /dev/shm/file ; set -x ; for i in `seq 1 10` ; do mkdir /dev/shm/directory$i dir$i; chmod 777 /dev/shm/file ; ls -la /dev/shm ; sleep 2 ; done"
+			"pwd ; cd /dev/shm ; pwd ; pwd ; touch /dev/shm/file ; set -x ; for i in `seq 1 2` ; do mkdir /dev/shm/directory$i dir$i; chmod 777 /dev/shm/file ; ls -la /dev/shm ; sleep 2 ; done"
 		],
 		"env": [
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -145,19 +145,28 @@
 			"syscalls": [
 				{
 					"names": [
-						"send",
-						"futex",
+						"arch_prctl",
+						"brk",
+						"chdir",
+						"clone",
 						"close",
+						"dup2",
+						"execve",
+						"exit_group",
+						"getdents64",
+						"newfstatat",
+						"open",
 						"openat",
+						"pipe",
+						"read",
+						"stat",
+						"wait4",
 						"write",
 						"getpid",
-						"read",
-						"execve",
-						"pidfd_getfd",
-						"pidfd_open",
-						"brk",
-						"arch_prctl",
-						"rt_sigprocmask"
+						"mkdir",
+						"rt_sigreturn",
+						"fstat",
+						"futex"
 					],
 					"action": "SCMP_ACT_ALLOW"
 				}
