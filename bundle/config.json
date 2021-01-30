@@ -7,9 +7,7 @@
 			"gid": 0
 		},
 		"args": [
-			"sh",
-			"-c",
-			"pwd ; cd /dev/shm ; pwd ; pwd ; touch /dev/shm/file ; set -x ; for i in `seq 1 2` ; do mkdir /dev/shm/directory$i dir$i; chmod 777 /dev/shm/file ; ls -la /dev/shm ; sleep 2 ; done"
+			"ls"
 		],
 		"env": [
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -145,28 +143,22 @@
 			"syscalls": [
 				{
 					"names": [
-						"arch_prctl",
-						"brk",
-						"chdir",
-						"clone",
+						"write",
 						"close",
-						"dup2",
+						"openat",
+						"getpid",
 						"execve",
-						"exit_group",
+						"brk",
+						"arch_prctl",
+						"ioctl",
+						"getuid",
+						"time",
+						"stat",
+						"open",
+						"fstat",
 						"getdents64",
 						"newfstatat",
-						"open",
-						"openat",
-						"pipe",
-						"read",
-						"stat",
-						"wait4",
-						"write",
-						"getpid",
-						"mkdir",
-						"rt_sigreturn",
-						"fstat",
-						"futex"
+						"exit_group"
 					],
 					"action": "SCMP_ACT_ALLOW"
 				}

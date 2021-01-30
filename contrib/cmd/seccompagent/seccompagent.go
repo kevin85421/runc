@@ -11,11 +11,16 @@ import (
 	"net"
 	"os"
 	"strings"
+	"syscall"
+	"reflect"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/unix"	
+	"golang.org/x/net/bpf"
+	"C"
+	"unsafe"
 )
 
 var (
@@ -117,9 +122,118 @@ func runMkdirForContainer(pid uint32, fileName string, mode uint32, metadata str
 	return unix.Mkdir(fmt.Sprintf("/proc/%d/cwd/%s-%s", pid, fileName, metadata), mode)
 }
 
+type seccomp_data struct {
+	nr int
+	arch uint32
+	instruction_pointer uint64
+	args[6] uint64
+}
+
+// func makeAllow(nr C.int, fd libseccomp.ScmpFd) {
+func makeNotify(syscall_slice []string, fd libseccomp.ScmpFd) {
+	seccomp_data_struct := seccomp_data{}
+	logrus.Debugf("Function: makeNotify; Offsetof(nr) = %v",  unsafe.Offsetof(seccomp_data_struct.nr))
+	bpf_instruction_slice := []bpf.Instruction{
+		bpf.LoadAbsolute{Off: uint32(unsafe.Offsetof(seccomp_data_struct.nr)), Size:4},
+	}
+
+	for _, syscall_name := range syscall_slice {
+		selected_call, _ := libseccomp.GetSyscallFromName(syscall_name)
+		syscall_nr := C.int(selected_call)
+		bpf_instruction_slice = append(bpf_instruction_slice,
+						bpf.JumpIf{Cond: bpf.JumpEqual, Val: uint32(syscall_nr), SkipTrue: 0, SkipFalse:1},
+						bpf.RetConstant{Val:0x7fc00000})
+		logrus.Debugf("Function: makeNotify; syscall: %v / nr = %v / uint32(nr) = %v", syscall_name, syscall_nr, uint32(syscall_nr))
+	}
+
+	bpf_instruction_slice = append(bpf_instruction_slice, bpf.RetConstant{Val:0x7fff0000}) // SECCOMP_RET_ALLOW
+
+	/*
+	filter, _ := bpf.Assemble([]bpf.Instruction{
+		bpf.LoadAbsolute{Off: uint32(unsafe.Offsetof(seccomp_data_struct.nr)), Size:4},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: uint32(nr), SkipTrue: 0, SkipFalse:1},
+		bpf.RetConstant{Val:0x7fc00000}, // SECCOMP_RET_USER_NOTIF
+		bpf.RetConstant{Val:0x7fff0000}, // SECCOMP_RET_ALLOW
+		// bpf.RetConstant{Val: 0x7fff0000}, // SECCOMP_RET_ALLOW
+		// bpf.RetConstant{Val: 0x7fff0000}, // SECCOMP_RET_ALLOW
+	})
+	*/
+	filter, _ := bpf.Assemble(bpf_instruction_slice)
+	// ===================================================================================== //
+	for filter_index, raw_inst := range filter {
+		logrus.Debugf("Function: filter[%v]:", filter_index)
+
+		typ := reflect.TypeOf(raw_inst)
+		fmt.Printf("Struct is %d bytes long\n", typ.Size())
+		n := typ.NumField()
+		for i := 0; i < n; i++ {
+			field := typ.Field(i)
+			fmt.Printf("%s at offset %v, size=%d, align=%d\n",
+				   field.Name, field.Offset, field.Type.Size(), field.Type.Align())
+		}
+		dataBytes := (*[8]byte)(unsafe.Pointer(&raw_inst))
+		fmt.Printf("Bytes are %#v\n", dataBytes)
+	}
+	// ===================================================================================== //
+
+	prog := unix.SockFprog{
+		Len:    uint16(len(filter)),
+		Filter: (*unix.SockFilter)(unsafe.Pointer(&filter[0])),
+	}
+	SECCOMP_IOCTL_NOTIF_REPLACE_BPF := C.ulong(0xc0102104)
+	syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(SECCOMP_IOCTL_NOTIF_REPLACE_BPF), uintptr(unsafe.Pointer(&prog)))
+	logrus.Debugf("Function: makeNotify; prog = %v", prog)
+}
+
+func launchServer() net.Conn {
+	l, listen_err := net.Listen("tcp", "0.0.0.0:8888")
+	if listen_err != nil {
+		logrus.Errorf("Error in Listen(): %s", listen_err)
+	}
+	defer l.Close()
+
+	// accept connection
+	logrus.Debugf("Waiting for new connection...")
+	conn, accept_err := l.Accept()
+	if accept_err != nil {
+		logrus.Errorf("Error in Accept(): %s", accept_err)
+	}
+	return conn
+}
+
+func handleReplaceReq(conn net.Conn) []string {
+	defer conn.Close()
+
+	// handle incoming data
+	buffer := make([]byte, 1024)
+	numBytes, err := conn.Read(buffer)
+	if err != nil {
+		logrus.Errorf("Error in Read(): %s", err)
+	}
+	logrus.Debugf("received", numBytes, "bytes:", string(buffer))
+	logrus.Debugf("received", numBytes, "bytes:", string(buffer[:numBytes]))
+	// handle reply
+	return []string{string(buffer)}
+}
+
 // notifHandler handles seccomp notifications and responses
 func notifHandler(fd libseccomp.ScmpFd, metadata string) {
 	defer unix.Close(int(fd))
+
+	syscall_log, _ := os.Create("syscall_log")
+	defer syscall_log.Close()
+	var syscallSet map[string]struct{}
+	syscallSet = make(map[string]struct{})
+
+	replace_conn := launchServer()
+	syscall_slice := handleReplaceReq(replace_conn)
+	logrus.Debugf("syscall_slice = %+v\n", syscall_slice)
+	// syscall_slice := []string{"newfstatat","getdents64"}
+	// selected_call, _ := libseccomp.GetSyscallFromName("newfstatat")
+	// selected_call, _ := libseccomp.GetSyscallFromName("getdents64")
+	// nr := C.int(selected_call)
+	makeNotify(syscall_slice,fd)
+
 	for {
 		req, err := libseccomp.NotifReceive(fd)
 		if err != nil {
@@ -132,7 +246,10 @@ func notifHandler(fd libseccomp.ScmpFd, metadata string) {
 			continue
 		}
 		logrus.Debugf("Received syscall %q, pid %v, arch %q, args %+v\n", syscallName, req.Pid, req.Data.Arch, req.Data.Args)
-
+		if _, ok := syscallSet[syscallName]; ok == false {
+			syscall_log.WriteString(syscallName + "\n")
+			syscallSet[syscallName] = struct{}{}
+		}
 		resp := &libseccomp.ScmpNotifResp{
 			ID:    req.ID,
 			Error: 0,
